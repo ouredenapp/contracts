@@ -146,7 +146,7 @@ contract EdenStaking is EdenStakingRoot {
         }
 
         uint256 amountToUnstake = basicStakes[basicStakingId][staker].amount;
-        uint256 reward = (amountToUnstake * basicStakingConfigs[basicStakingId].annualPercentage)/10000;
+        uint256 reward = computeReward(amountToUnstake, basicStakingConfigs[basicStakingId].annualPercentage, basicStakingConfigs[basicStakingId].lengthInDays);
 
         emit RewardClaimedAndUnstaked(staker, basicStakingId, amountToUnstake, reward);
 

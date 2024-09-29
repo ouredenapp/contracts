@@ -6,6 +6,16 @@ const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+//deployer: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+//a1: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8  // 
+//a2: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC  // 
+//a3: 0x90F79bf6EB2c4f870365E785982E1f101E93b906  // 
+//a4: 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65  // 
+//a5: 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc  // 
+//a6: 0x976EA74026E726554dB657fA54763abd0C3a0aa9  // 
+//a7: 0x14dC79964da2C08b23698B3D3cc7Ca32193d9955  // 
+//a8: 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f  // 
+
 const totalSupply = ethers.toBigInt("7200000000000000000000000000");
 
 const defaultAdminRole = '0x0000000000000000000000000000000000000000000000000000000000000000';
@@ -41,6 +51,8 @@ describe("Complex tests", function () {
     //token = await Token.deploy();
 
     const Staking = await ethers.getContractFactory("EdenStaking");
+    
+    await expect(Staking.deploy(ethers.ZeroAddress, basicStakingConfig[0], basicStakingConfig[1], basicStakingConfig[2], mainStakingPeriodsConfig[0], mainStakingPeriodsConfig[1])).to.be.reverted;
     staking = await Staking.deploy(token.target, basicStakingConfig[0], basicStakingConfig[1], basicStakingConfig[2], mainStakingPeriodsConfig[0], mainStakingPeriodsConfig[1]);
 
   });
@@ -214,16 +226,25 @@ describe("Complex tests", function () {
       let basiStakes = await staking.basicStakes(0, addr2.address);
       expect(basiStakes[2]).to.true;
 
-      // 2.4M
+      // 90 days/ 20% 
+      let rewardBasic = (ethers.parseUnits("2000000", "ether") * 2000n * 90n) / 3650000n;    
       await expect(staking.connect(addr2).claimAndUnstakeBasicReward(0))
         .to
-          .emit(staking, "RewardClaimedAndUnstaked").withArgs(addr2.address, 0, ethers.parseUnits("2000000", "ether"), ethers.parseUnits("400000", "ether"))
-          .emit(token, "Transfer").withArgs(staking.target, addr2.address, ethers.parseUnits("2400000", "ether"));
+          .emit(staking, "RewardClaimedAndUnstaked").withArgs(addr2.address, 0, ethers.parseUnits("2000000", "ether"), rewardBasic)
+          .emit(token, "Transfer").withArgs(staking.target, addr2.address, ethers.parseUnits("2000000", "ether") + rewardBasic);
 
       basiStakes = await staking.basicStakes(0, addr2.address);
       expect(basiStakes[2]).to.false;
-    
 
+      increaseTime = 130 * 86400; // 130 days / total 221 
+      await time.increase(increaseTime);
+
+      // 210 days / 30% 
+      rewardBasic = (ethers.parseUnits("1000000", "ether") * 3000n * 210n) / 3650000n;    
+      await expect(staking.connect(addr2).claimAndUnstakeBasicReward(1))
+      .to
+        .emit(staking, "RewardClaimedAndUnstaked").withArgs(addr2.address, 1, ethers.parseUnits("1000000", "ether"), rewardBasic)
+        .emit(token, "Transfer").withArgs(staking.target, addr2.address, ethers.parseUnits("1000000", "ether") + rewardBasic);
     });
 
   });

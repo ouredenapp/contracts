@@ -29,6 +29,8 @@ contract EdenVesting is VestingRoot, Pausable {
     error WalletAlreadyExists(address wallet, uint256 pooId);
     error WalletNotSet(address wallet, uint256 pooId);
     error CannotRemoveWalletFromVestingPool(address wallet, uint256 pooId);
+    error ZeroAddressOccured();
+    error ZeroBytesOccured();
 
     event Claimed(address indexed to, uint256 poolId, uint256 amount);
     event WalletAdded(address indexed wallet, uint256 pooId, uint256 vestingAmount);
@@ -44,6 +46,9 @@ contract EdenVesting is VestingRoot, Pausable {
     }
 
     constructor(IERC20 edenTokenContract_) {
+        if(address(edenTokenContract_) == address(0)) {
+            revert ZeroAddressOccured();    
+        }    
         edenTokenContract = edenTokenContract_;
         _pause();
     }
@@ -59,6 +64,9 @@ contract EdenVesting is VestingRoot, Pausable {
     }
 
     function setMerkleRoot(bytes32 _newMerkleRoot) external whenPaused onlyRole(MANAGER_ROLE) {
+        if(_newMerkleRoot == bytes32(0)) {
+            revert ZeroBytesOccured();
+        }
         merkleRoot = _newMerkleRoot;
     }
 
@@ -221,7 +229,7 @@ contract EdenVesting is VestingRoot, Pausable {
         for(uint256 i; i < walletPoolsLength; ) {
                        
             uint256 amount = releasable(sender, walletPools[sender][i]);
-            if(amount >= 0) {
+            if(amount != 0) {
                 totalReleasable += amount;
                 releasedAmount[walletPools[sender][i]][sender] += amount;
                 emit Released(sender, walletPools[sender][i], amount);

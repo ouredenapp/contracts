@@ -60,6 +60,7 @@ contract EdenStakingRoot is AccessControlEnumerable {
     error RestakeIsNotActive();    
     error AddFundsIsNotActive();
     error RestakeIntervalNotPassed(address staker);
+    error ZeroAddressOccured();
 
     event PeriodAdded(uint256 indexed index, uint256 lengthInDays, uint256 annualPercentage);
     event PeriodUpdated(uint256 indexed index, uint256 lengthInDays, uint256 annualPercentage);
@@ -85,7 +86,10 @@ contract EdenStakingRoot is AccessControlEnumerable {
         uint256[] memory annualPercentages
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MANAGER_ROLE, msg.sender); 
+        _grantRole(MANAGER_ROLE, msg.sender);     
+        if(address(edenTokenContract_) == address(0)) {
+            revert ZeroAddressOccured();
+        }
         edenTokenContract = edenTokenContract_;
         setPeriods(lengthInDays, annualPercentages);
     }

@@ -10,12 +10,19 @@ import "./includes/TransactionThrottler.sol";
 
 contract EdenToken is ERC20, ERC20Burnable, ERC20Pausable, ERC20Permit, TransactionThrottler {
     
+    uint256 constant private TOTAL_SUPPLY = 7200000000 ether;
+
+    error ZeroAddressOccured();   
+
     constructor(address mintTo)
         ERC20("EDEN", "EDN")
         TransactionThrottler(msg.sender)
         ERC20Permit("EDEN")
     {
-        _mint(mintTo, 7_200_000_000 * 10 ** decimals());
+        if(address(mintTo) == address(0)) {
+            revert ZeroAddressOccured();    
+        }    
+        _mint(mintTo, TOTAL_SUPPLY);
     }
 
     function pause() public onlyOwner {
