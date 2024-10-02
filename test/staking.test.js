@@ -103,6 +103,8 @@ describe("Complex tests", function () {
 
       await expect(staking.updateBasicStaking(3, 222, 3300, ethers.parseUnits("33333333", "ether"))).to.be.revertedWithCustomError(staking, "BasicStakingConfigDoesNotExists");
 
+      await expect(staking.updateBasicStaking(1, 222, 6500, ethers.parseUnits("1500", "ether"))).to.to.be.revertedWithCustomError(staking, "BadInputData");
+      await expect(staking.updateBasicStaking(1, 222, 9300, ethers.parseUnits("33333333", "ether"))).to.to.be.revertedWithCustomError(staking, "BadInputData");
       await expect(staking.updateBasicStaking(1, 222, 3300, ethers.parseUnits("33333333", "ether"))).to.emit(staking, "BasicStakingConfigUpdated").withArgs(1, 222, 3300, ethers.parseUnits("33333333", "ether"));
 
       const configItem = await staking.basicStakingConfigs(1);
@@ -112,9 +114,11 @@ describe("Complex tests", function () {
       ;
 
       await staking.updateBasicStaking(1, 210, 3000, ethers.parseUnits("30000000", "ether"));
+      
       const configItemRollbacked = await staking.basicStakingConfigs(1);
       expect(configItemRollbacked).to.be.eql([ethers.toBigInt(basicStakingConfig[0][1]),ethers.toBigInt(basicStakingConfig[1][1]),basicStakingConfig[2][1]]);
 
+      await expect(staking.addBasicStaking(720, 9500, ethers.parseUnits("100000000", "ether"))).to.revertedWithCustomError(staking, "BadInputData");
       await expect(staking.addBasicStaking(720, 6000, ethers.parseUnits("100000000", "ether"))).to.emit(staking, "BasicStakingConfigAdded").withArgs(3, 720, 6000, ethers.parseUnits("100000000", "ether"));
       const configItemAdded = await staking.basicStakingConfigs(3);
       

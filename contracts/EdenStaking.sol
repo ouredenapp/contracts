@@ -29,12 +29,19 @@ contract EdenStaking is EdenStakingRoot {
     uint256 public basicStakingMinAmount = 25_000 ether;
     uint256 public basicStakingMaxAmount = 2_000_000 ether;
 
+    uint256 private immutable minBasicLengthInDays = 30;
+    uint256 private immutable maxBasicLengthInDays = 730;
+    uint256 private immutable minBasicAnnualPercentages = 200;
+    uint256 private immutable maxBasicAnnualPercentages = 9000;
+    uint256 private immutable minBasicMaxStakingAmounts = 1_000_000 ether;
+
     error BasicStakingConfigDoesNotExists(uint256 stakingConfig);
     error BasicStakingAlreadySet(uint256 stakingConfig, address staker);
     error BasicStakingMaxStakingAmounExceeded(uint256 basicStakingId);
     error BasicStakingInvalidAmount(address stakter, uint256 stakingConfig, uint256 amount);
     error BasicStakingDoesNotExists(uint256 basicStakingId, address staker);
     error BasicStakingStillGoingOn(uint256 stakingConfig, address staker);
+    error BadInputData();
     
     event BasicStakingConfigAdded(uint256 indexed index, uint256 basicLengthInDays, uint256 basicAnnualPercentage, uint256 basicMaxStakingAmount);
     event BasicStakingConfigUpdated(uint256 indexed basicStakingId, uint256 lengthInDaysTo, uint256 annualPercentage, uint256 basicMaxStakingAmount);    
@@ -64,6 +71,7 @@ contract EdenStaking is EdenStakingRoot {
         }
 
         for(uint256 i; i < inputArrayLength; ) {            
+            validateBasicStakingConfig(basicLengthInDays[i], basicAnnualPercentages[i], basicMaxStakingAmounts[i]);
             basicStakingConfigs.push(BasicStakingConfig(basicLengthInDays[i], basicAnnualPercentages[i], basicMaxStakingAmounts[i]));
             basicStakingLength++;
             emit BasicStakingConfigAdded(i, basicLengthInDays[i], basicAnnualPercentages[i], basicMaxStakingAmounts[i]);
@@ -75,6 +83,7 @@ contract EdenStaking is EdenStakingRoot {
     }
 
     function addBasicStaking(uint256 basicLengthInDays, uint256 basicAnnualPercentage, uint256 basicMaxStakingAmount) public onlyRole(MANAGER_ROLE) {      
+        validateBasicStakingConfig(basicLengthInDays, basicAnnualPercentage, basicMaxStakingAmount);
         basicStakingConfigs.push(BasicStakingConfig(basicLengthInDays, basicAnnualPercentage, basicMaxStakingAmount));
         basicStakingLength++;
         emit BasicStakingConfigAdded(basicStakingLength - 1, basicLengthInDays, basicAnnualPercentage, basicMaxStakingAmount);
@@ -84,7 +93,7 @@ contract EdenStaking is EdenStakingRoot {
         if(basicStakingId >= basicStakingLength) {
             revert BasicStakingConfigDoesNotExists(basicStakingId);
         }
-
+        validateBasicStakingConfig(lengthInDaysTo, annualPercentage, basicMaxStakingAmount);
         BasicStakingConfig storage basicStaking = basicStakingConfigs[basicStakingId];
         basicStaking.lengthInDays = lengthInDaysTo;
         basicStaking.annualPercentage = annualPercentage;
@@ -154,5 +163,13 @@ contract EdenStaking is EdenStakingRoot {
 
         edenTokenContract.safeTransfer(staker, amountToUnstake + reward);
 
+    }
+
+    //------------------------------------------
+
+    function validateBasicStakingConfig(uint256 basicLengthInDays, uint256 basicAnnualPercentages, uint256 basicMaxStakingAmounts) internal pure {
+        if(!(basicLengthInDays >= minBasicLengthInDays && basicLengthInDays <= maxBasicLengthInDays && basicAnnualPercentages >= minBasicAnnualPercentages && basicAnnualPercentages <= maxBasicAnnualPercentages && basicMaxStakingAmounts > minBasicMaxStakingAmounts)) {
+            revert BadInputData();
+        }
     }
 }
