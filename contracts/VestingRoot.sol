@@ -147,7 +147,7 @@ contract VestingRoot is AccessControlEnumerable {
         return pools[poolId].tge;
     }
 
-    function setCliffStart() external cliffNotSet() onlyRole(MANAGER_ROLE) {
+    function setCliffStart() external cliffNotSet() onlyRole(MANAGER_ROLE) virtual {
         
         if(poolsLength == 0) {
             revert AtLeastOnePoolRequired();

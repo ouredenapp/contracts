@@ -22,6 +22,8 @@ contract EdenVesting is VestingRoot, Pausable {
     mapping(uint256 => mapping(address => uint256)) public releasedAmount;
     mapping(address => uint256[]) public walletPools;
     
+    uint256 private immutable minCliffStartBalance = 100_000_000 ether;
+
     error MerkleTreeNotSet();
     error MerkleTreeValidationFailed();
     error AlreadyClaimed(address wallet, uint256 pool);
@@ -31,6 +33,7 @@ contract EdenVesting is VestingRoot, Pausable {
     error CannotRemoveWalletFromVestingPool(address wallet, uint256 pooId);
     error ZeroAddressOccured();
     error ZeroBytesOccured();
+    error InsufficientBalance();
 
     event Claimed(address indexed to, uint256 poolId, uint256 amount);
     event WalletAdded(address indexed wallet, uint256 pooId, uint256 vestingAmount);
@@ -329,5 +332,33 @@ contract EdenVesting is VestingRoot, Pausable {
         }
 
     }
+
+    // -------------------------------------
+
+     function setCliffStart() external cliffNotSet() onlyRole(MANAGER_ROLE) override {
+        
+        if(poolsLength == 0) {
+            revert AtLeastOnePoolRequired();
+        }
+
+        if(edenTokenContract.balanceOf(address(this)) < minCliffStartBalance) {
+            revert InsufficientBalance();
+        }
+
+        uint256 cliffStart = block.timestamp;
+        for(uint256 i = 1; i <= poolsLength; ) {
+            uint256 cliffEnd = cliffStart + pools[i].cliffPeriod;
+            pools[i].cliffStart = cliffStart;        
+            pools[i].cliffEnd = cliffEnd;
+            pools[i].vestingEnd = cliffEnd + pools[i].vestingPeriod;
+            unchecked {
+                i++;
+            }
+        }
+
+        cliffStarted = true;
+        emit VestingCliffStarted();    
+    }
+
 
 }
