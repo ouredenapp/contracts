@@ -5,7 +5,7 @@ const {
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { merkleRoot, treeData, poolsData } = require("../scripts/tree.tests.js");
+const { merkleRoot, treeData, poolsData, timestampMultiPier } = require("../scripts/tree.tests.js");
 
 //deployer: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 //a1: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8  // 
@@ -137,6 +137,13 @@ describe("Complex tests", function () {
       // mismatch array length      
       await expect(vesting.addPools(cliffsPeriod.slice(0, 2), vestingPeriod, tge)).to.be.revertedWithCustomError(vesting, "InputArrayMismatchLength");
 
+      // validation tests
+      await expect(vesting.addPools([0.5 * timestampMultiPier], [3 * timestampMultiPier], [45])).to.be.revertedWithCustomError(vesting, "IncorrectPoolData");
+      await expect(vesting.addPools([13 * timestampMultiPier], [3 * timestampMultiPier], [45])).to.be.revertedWithCustomError(vesting, "IncorrectPoolData");
+      await expect(vesting.addPools([2 * timestampMultiPier], [0.5 * timestampMultiPier], [45])).to.be.revertedWithCustomError(vesting, "IncorrectPoolData");
+      await expect(vesting.addPools([2 * timestampMultiPier], [62 * timestampMultiPier], [45])).to.be.revertedWithCustomError(vesting, "IncorrectPoolData");
+      await expect(vesting.addPools([2 * timestampMultiPier], [24 * timestampMultiPier], [101])).to.be.revertedWithCustomError(vesting, "IncorrectPoolData");
+      
       // added
       await expect(vesting.addPools(cliffsPeriod, vestingPeriod, tge)).to.emit(vesting, "PoolAdded");
 

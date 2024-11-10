@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 import "./EdenStakingRoot.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract EdenStaking is EdenStakingRoot {
-    
     using SafeERC20 for IERC20;
+    uint256 private constant BASIC_LENGTH_IN_DAYS_MIN = 30;
+    uint256 private constant BASIC_LENGTH_IN_DAYS_MAX = 730;
+    uint256 private constant BASIC_ANNUAL_PERCENTAGES_MIN = 200;
+    uint256 private constant BASIC_ANNUAL_PERCENTAGES_MAX = 9000;
+    uint256 private constant BASIC_STAKING_AMOUNT_MAX = 1_000_000 ether;
 
     struct BasicStakingConfig {
         uint256 lengthInDays;
@@ -22,31 +26,48 @@ contract EdenStaking is EdenStakingRoot {
         uint256 startTime;
         bool set;
     }
-    
-    mapping (uint256 => mapping(address => BasicStaking)) public basicStakes;
-    mapping (uint256 => uint256) public basicStakesTotalAmount;
-    
+
+    mapping(uint256 => mapping(address => BasicStaking)) public basicStakes;
+    mapping(uint256 => uint256) public basicStakesTotalAmount;
+
     uint256 public basicStakingMinAmount = 25_000 ether;
     uint256 public basicStakingMaxAmount = 2_000_000 ether;
 
-    uint256 private immutable minBasicLengthInDays = 30;
-    uint256 private immutable maxBasicLengthInDays = 730;
-    uint256 private immutable minBasicAnnualPercentages = 200;
-    uint256 private immutable maxBasicAnnualPercentages = 9000;
-    uint256 private immutable minBasicMaxStakingAmounts = 1_000_000 ether;
+    event BasicStakingConfigAdded(
+        uint256 indexed index,
+        uint256 basicLengthInDays,
+        uint256 basicAnnualPercentage,
+        uint256 basicMaxStakingAmount
+    );
+    event BasicStakingConfigUpdated(
+        uint256 indexed basicStakingId,
+        uint256 lengthInDaysTo,
+        uint256 annualPercentage,
+        uint256 basicMaxStakingAmount
+    );
+    event BasicStakingAdded(
+        address indexed staker,
+        uint256 stakingConfig,
+        uint256 amount
+    );
+    event RewardClaimedAndUnstaked(
+        address indexed staker,
+        uint256 stakingConfig,
+        uint256 amount,
+        uint256 reward
+    );
 
     error BasicStakingConfigDoesNotExists(uint256 stakingConfig);
     error BasicStakingAlreadySet(uint256 stakingConfig, address staker);
     error BasicStakingMaxStakingAmounExceeded(uint256 basicStakingId);
-    error BasicStakingInvalidAmount(address stakter, uint256 stakingConfig, uint256 amount);
+    error BasicStakingInvalidAmount(
+        address stakter,
+        uint256 stakingConfig,
+        uint256 amount
+    );
     error BasicStakingDoesNotExists(uint256 basicStakingId, address staker);
     error BasicStakingStillGoingOn(uint256 stakingConfig, address staker);
     error BadInputData();
-    
-    event BasicStakingConfigAdded(uint256 indexed index, uint256 basicLengthInDays, uint256 basicAnnualPercentage, uint256 basicMaxStakingAmount);
-    event BasicStakingConfigUpdated(uint256 indexed basicStakingId, uint256 lengthInDaysTo, uint256 annualPercentage, uint256 basicMaxStakingAmount);    
-    event BasicStakingAdded(address indexed staker, uint256 stakingConfig, uint256 amount);    
-    event RewardClaimedAndUnstaked(address indexed staker, uint256 stakingConfig, uint256 amount, uint256 reward);
 
     constructor(
         IERC20 edenTokenContract_,
@@ -55,121 +76,211 @@ contract EdenStaking is EdenStakingRoot {
         uint256[] memory basicMaxStakingAmounts,
         uint256[] memory mainLengthInDaysTo,
         uint256[] memory mainAnnualPercentages
-    ) EdenStakingRoot(edenTokenContract_, mainLengthInDaysTo, mainAnnualPercentages) {
-        setBasicStakingConfigs(basicLengthInDays, basicAnnualPercentages, basicMaxStakingAmounts);
+    )
+        EdenStakingRoot(
+            edenTokenContract_,
+            mainLengthInDaysTo,
+            mainAnnualPercentages
+        )
+    {
+        setBasicStakingConfigs(
+            basicLengthInDays,
+            basicAnnualPercentages,
+            basicMaxStakingAmounts
+        );
     }
 
-    function setBasicStakingConfigs(uint256[] memory basicLengthInDays, uint256[] memory basicAnnualPercentages, uint256[] memory basicMaxStakingAmounts) internal {
-
-        uint256 inputArrayLength = basicLengthInDays.length;
-        if(inputArrayLength != basicAnnualPercentages.length) {
-            revert InputArrayMismatchLength();
-        }
-
-        if(inputArrayLength != basicMaxStakingAmounts.length) {
-            revert InputArrayMismatchLength();
-        }
-
-        for(uint256 i; i < inputArrayLength; ) {            
-            validateBasicStakingConfig(basicLengthInDays[i], basicAnnualPercentages[i], basicMaxStakingAmounts[i]);
-            basicStakingConfigs.push(BasicStakingConfig(basicLengthInDays[i], basicAnnualPercentages[i], basicMaxStakingAmounts[i]));
-            basicStakingLength++;
-            emit BasicStakingConfigAdded(i, basicLengthInDays[i], basicAnnualPercentages[i], basicMaxStakingAmounts[i]);
-            unchecked {
-                i++;
-            }            
-        }     
-
-    }
-
-    function addBasicStaking(uint256 basicLengthInDays, uint256 basicAnnualPercentage, uint256 basicMaxStakingAmount) public onlyRole(MANAGER_ROLE) {      
-        validateBasicStakingConfig(basicLengthInDays, basicAnnualPercentage, basicMaxStakingAmount);
-        basicStakingConfigs.push(BasicStakingConfig(basicLengthInDays, basicAnnualPercentage, basicMaxStakingAmount));
+    function addBasicStaking(
+        uint256 basicLengthInDays,
+        uint256 basicAnnualPercentage,
+        uint256 basicMaxStakingAmount
+    ) external onlyRole(MANAGER_ROLE) {
+        validateBasicStakingConfig(
+            basicLengthInDays,
+            basicAnnualPercentage,
+            basicMaxStakingAmount
+        );
+        basicStakingConfigs.push(
+            BasicStakingConfig(
+                basicLengthInDays,
+                basicAnnualPercentage,
+                basicMaxStakingAmount
+            )
+        );
         basicStakingLength++;
-        emit BasicStakingConfigAdded(basicStakingLength - 1, basicLengthInDays, basicAnnualPercentage, basicMaxStakingAmount);
+        emit BasicStakingConfigAdded(
+            basicStakingLength - 1,
+            basicLengthInDays,
+            basicAnnualPercentage,
+            basicMaxStakingAmount
+        );
     }
 
-    function updateBasicStaking(uint256 basicStakingId, uint256 lengthInDaysTo, uint256 annualPercentage, uint256 basicMaxStakingAmount) external onlyRole(MANAGER_ROLE) {        
-        if(basicStakingId >= basicStakingLength) {
+    function updateBasicStaking(
+        uint256 basicStakingId,
+        uint256 lengthInDaysTo,
+        uint256 annualPercentage,
+        uint256 basicMaxStakingAmount
+    ) external onlyRole(MANAGER_ROLE) {
+        if (basicStakingId >= basicStakingLength) {
             revert BasicStakingConfigDoesNotExists(basicStakingId);
         }
-        validateBasicStakingConfig(lengthInDaysTo, annualPercentage, basicMaxStakingAmount);
-        BasicStakingConfig storage basicStaking = basicStakingConfigs[basicStakingId];
+        validateBasicStakingConfig(
+            lengthInDaysTo,
+            annualPercentage,
+            basicMaxStakingAmount
+        );
+        BasicStakingConfig storage basicStaking = basicStakingConfigs[
+            basicStakingId
+        ];
         basicStaking.lengthInDays = lengthInDaysTo;
         basicStaking.annualPercentage = annualPercentage;
         basicStaking.maxStakingAmount = basicMaxStakingAmount;
         basicStakingConfigs[basicStakingId] = basicStaking;
 
-        emit BasicStakingConfigUpdated(basicStakingId, lengthInDaysTo, annualPercentage, basicMaxStakingAmount);
+        emit BasicStakingConfigUpdated(
+            basicStakingId,
+            lengthInDaysTo,
+            annualPercentage,
+            basicMaxStakingAmount
+        );
     }
 
-    function setBasicStakingMinAmount(uint256 minAmount)  external onlyRole(MANAGER_ROLE) {
-        basicStakingMinAmount = minAmount;        
+    function setBasicStakingMinAmount(
+        uint256 minAmount
+    ) external onlyRole(MANAGER_ROLE) {
+        basicStakingMinAmount = minAmount;
     }
 
-    function setBasicStakingMaxAmount(uint256 maxAmount)  external onlyRole(MANAGER_ROLE) {
-        basicStakingMaxAmount = maxAmount;        
+    function setBasicStakingMaxAmount(
+        uint256 maxAmount
+    ) external onlyRole(MANAGER_ROLE) {
+        basicStakingMaxAmount = maxAmount;
     }
-
-    //------------------------------------------
 
     function stakeBasic(uint256 basicStakingId, uint256 amount) external {
         address staker = _msgSender();
-        
-        if(basicStakingId >= basicStakingLength) {
+
+        if (basicStakingId >= basicStakingLength) {
             revert BasicStakingConfigDoesNotExists(basicStakingId);
         }
-        
-        if(basicStakes[basicStakingId][staker].set == true) {
+
+        if (basicStakes[basicStakingId][staker].set == true) {
             revert BasicStakingAlreadySet(basicStakingId, staker);
         }
 
-        if(amount < basicStakingMinAmount || amount > basicStakingMaxAmount) {
+        if (amount < basicStakingMinAmount || amount > basicStakingMaxAmount) {
             revert BasicStakingInvalidAmount(staker, basicStakingId, amount);
         }
 
-        if(basicStakesTotalAmount[basicStakingId] + amount > basicStakingConfigs[basicStakingId].maxStakingAmount) {
-            revert BasicStakingMaxStakingAmounExceeded(basicStakingId);  
+        if (
+            basicStakesTotalAmount[basicStakingId] + amount >
+            basicStakingConfigs[basicStakingId].maxStakingAmount
+        ) {
+            revert BasicStakingMaxStakingAmounExceeded(basicStakingId);
         }
-        
+
         emit BasicStakingAdded(staker, basicStakingId, amount);
-        basicStakes[basicStakingId][staker] = BasicStaking(amount, block.timestamp, true);
+        basicStakes[basicStakingId][staker] = BasicStaking(
+            amount,
+            block.timestamp,
+            true
+        );
         basicStakesTotalAmount[basicStakingId] += amount;
         edenTokenContract.safeTransferFrom(staker, address(this), amount);
-
     }
 
-    function claimAndUnstakeBasicReward(uint256 basicStakingId)  external {            
+    function claimAndUnstakeBasicReward(uint256 basicStakingId) external {
         address staker = _msgSender();
 
-        if(basicStakingId >= basicStakingLength) {
+        if (basicStakingId >= basicStakingLength) {
             revert BasicStakingConfigDoesNotExists(basicStakingId);
-        }    
+        }
 
-        if(basicStakes[basicStakingId][staker].set == false) {
+        if (basicStakes[basicStakingId][staker].set == false) {
             revert BasicStakingDoesNotExists(basicStakingId, staker);
-        }  
+        }
 
-        if(block.timestamp < basicStakes[basicStakingId][staker].startTime + (basicStakingConfigs[basicStakingId].lengthInDays * 1 days)) {
-            revert BasicStakingStillGoingOn(basicStakingId, staker); 
+        if (
+            block.timestamp <
+            basicStakes[basicStakingId][staker].startTime +
+                (basicStakingConfigs[basicStakingId].lengthInDays * 1 days)
+        ) {
+            revert BasicStakingStillGoingOn(basicStakingId, staker);
         }
 
         uint256 amountToUnstake = basicStakes[basicStakingId][staker].amount;
-        uint256 reward = computeReward(amountToUnstake, basicStakingConfigs[basicStakingId].annualPercentage, basicStakingConfigs[basicStakingId].lengthInDays);
+        uint256 reward = computeReward(
+            amountToUnstake,
+            basicStakingConfigs[basicStakingId].annualPercentage,
+            basicStakingConfigs[basicStakingId].lengthInDays
+        );
 
-        emit RewardClaimedAndUnstaked(staker, basicStakingId, amountToUnstake, reward);
+        emit RewardClaimedAndUnstaked(
+            staker,
+            basicStakingId,
+            amountToUnstake,
+            reward
+        );
 
         delete basicStakes[basicStakingId][staker];
 
         edenTokenContract.safeTransfer(staker, amountToUnstake + reward);
-
     }
 
-    //------------------------------------------
-
-    function validateBasicStakingConfig(uint256 basicLengthInDays, uint256 basicAnnualPercentages, uint256 basicMaxStakingAmounts) internal pure {
-        if(!(basicLengthInDays >= minBasicLengthInDays && basicLengthInDays <= maxBasicLengthInDays && basicAnnualPercentages >= minBasicAnnualPercentages && basicAnnualPercentages <= maxBasicAnnualPercentages && basicMaxStakingAmounts > minBasicMaxStakingAmounts)) {
+    function validateBasicStakingConfig(
+        uint256 basicLengthInDays,
+        uint256 basicAnnualPercentages,
+        uint256 basicMaxStakingAmounts
+    ) internal pure {
+        if (
+            !(basicLengthInDays >= BASIC_LENGTH_IN_DAYS_MIN &&
+                basicLengthInDays <= BASIC_LENGTH_IN_DAYS_MAX &&
+                basicAnnualPercentages >= BASIC_ANNUAL_PERCENTAGES_MIN &&
+                basicAnnualPercentages <= BASIC_ANNUAL_PERCENTAGES_MAX &&
+                basicMaxStakingAmounts > BASIC_STAKING_AMOUNT_MAX)
+        ) {
             revert BadInputData();
+        }
+    }
+
+    function setBasicStakingConfigs(
+        uint256[] memory basicLengthInDays,
+        uint256[] memory basicAnnualPercentages,
+        uint256[] memory basicMaxStakingAmounts
+    ) internal {
+        uint256 inputArrayLength = basicLengthInDays.length;
+        if (inputArrayLength != basicAnnualPercentages.length) {
+            revert InputArrayMismatchLength();
+        }
+
+        if (inputArrayLength != basicMaxStakingAmounts.length) {
+            revert InputArrayMismatchLength();
+        }
+
+        for (uint256 i; i < inputArrayLength; ) {
+            validateBasicStakingConfig(
+                basicLengthInDays[i],
+                basicAnnualPercentages[i],
+                basicMaxStakingAmounts[i]
+            );
+            basicStakingConfigs.push(
+                BasicStakingConfig(
+                    basicLengthInDays[i],
+                    basicAnnualPercentages[i],
+                    basicMaxStakingAmounts[i]
+                )
+            );
+            basicStakingLength++;
+            emit BasicStakingConfigAdded(
+                i,
+                basicLengthInDays[i],
+                basicAnnualPercentages[i],
+                basicMaxStakingAmounts[i]
+            );
+            unchecked {
+                i++;
+            }
         }
     }
 }

@@ -4,42 +4,42 @@ pragma solidity 0.8.24;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 abstract contract TransactionThrottler is Ownable {
-    
     bool internal _restrictionActive;
-    
+
     uint256 private constant _delayBetweenTx = 30;
     uint256 private _maxTransferAmount;
     uint256 private _maxWalletAmount;
-    
+
     mapping(address => bool) private _isWhitelisted;
     mapping(address => bool) private _isUnthrottled;
     mapping(address => uint256) private _previousTx;
-
-    error ZeroAddressIsProhibited();
-    
-    error MaxTransferAmountExceeded();
-    error TransactionProtectionIntervalLimit();
 
     event RestrictionActiveChanged(bool active);
     event MaxTransferAmountChanged(uint256 maxTransferAmount);
     event MarkedWhitelisted(address indexed account, bool isWhitelisted);
     event MarkedUnthrottled(address indexed account, bool isUnthrottled);
 
-    constructor(address initialOwner) Ownable(initialOwner) {
-    }
+    error ZeroAddressIsProhibited();
+    error MaxTransferAmountExceeded();
+    error TransactionProtectionIntervalLimit();
 
-    function setMaxTransferAmount(uint256 amount) virtual external onlyOwner() {
+    constructor(address initialOwner) Ownable(initialOwner) {}
+
+    function setMaxTransferAmount(uint256 amount) external virtual onlyOwner {
         _maxTransferAmount = amount;
         emit MaxTransferAmountChanged(_maxTransferAmount);
     }
 
-    function setRestrictionActive(bool active) external onlyOwner() {
+    function setRestrictionActive(bool active) external onlyOwner {
         _restrictionActive = active;
         emit RestrictionActiveChanged(_restrictionActive);
     }
 
-    function unthrottleAccount(address account, bool unthrottled) virtual public onlyOwner() {
-        if(account == address(0)) {
+    function unthrottleAccount(
+        address account,
+        bool unthrottled
+    ) public virtual onlyOwner {
+        if (account == address(0)) {
             revert ZeroAddressIsProhibited();
         }
         _isUnthrottled[account] = unthrottled;
@@ -50,8 +50,11 @@ abstract contract TransactionThrottler is Ownable {
         return _isUnthrottled[account];
     }
 
-    function whitelistAccount(address account, bool whitelisted) virtual public onlyOwner() {
-        if(account == address(0)) {
+    function whitelistAccount(
+        address account,
+        bool whitelisted
+    ) public virtual onlyOwner {
+        if (account == address(0)) {
             revert ZeroAddressIsProhibited();
         }
         _isWhitelisted[account] = whitelisted;
@@ -67,29 +70,32 @@ abstract contract TransactionThrottler is Ownable {
         address recipient,
         uint256 amount
     ) virtual {
-        
-        if (_restrictionActive && !_isUnthrottled[recipient] && !_isUnthrottled[sender]) {
-           
+        if (
+            _restrictionActive &&
+            !_isUnthrottled[recipient] &&
+            !_isUnthrottled[sender]
+        ) {
             if (_maxTransferAmount > 0) {
-                if(amount > _maxTransferAmount) {
+                if (amount > _maxTransferAmount) {
                     revert MaxTransferAmountExceeded();
                 }
             }
 
             if (!_isWhitelisted[recipient]) {
-                if(_previousTx[recipient] + _delayBetweenTx > block.timestamp) {
+                if (
+                    _previousTx[recipient] + _delayBetweenTx > block.timestamp
+                ) {
                     revert TransactionProtectionIntervalLimit();
-                }                
+                }
                 _previousTx[recipient] = block.timestamp;
             }
 
-            if (!_isWhitelisted[sender]) {                
-                if(_previousTx[sender] + _delayBetweenTx > block.timestamp){
+            if (!_isWhitelisted[sender]) {
+                if (_previousTx[sender] + _delayBetweenTx > block.timestamp) {
                     revert TransactionProtectionIntervalLimit();
                 }
                 _previousTx[sender] = block.timestamp;
             }
-
         }
         _;
     }
